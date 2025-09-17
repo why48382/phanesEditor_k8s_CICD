@@ -107,7 +107,7 @@ jobs:
                 type: app
                 ver: ${NEXT_VER}
               ports:
-                - port: 443
+                - port: 8080
                   targetPort: 8080
               type: LoadBalancer
             EOF
