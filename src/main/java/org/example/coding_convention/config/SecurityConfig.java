@@ -78,18 +78,16 @@ public class SecurityConfig {
                 (auth) -> auth
                         // Swagger 관련 리소스는 항상 허용
                         .requestMatchers(
-                                "/swagger-ui/**",
-                                "/swagger-ui.html",
-                                "/v3/api-docs/**",
-                                "/swagger-resources/**",
-                                "/webjars/**"
+                                "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/swagger-resources/**", "/webjars/**"
                         ).permitAll()
 
                         // 로그인/회원가입/소셜 로그인은 허용
-                        .requestMatchers("/login", "/auth/**", "/user/signup", "/oauth2/**", "/login/oauth2/**","/user/verify").permitAll()
+                        .requestMatchers("/login", "/auth/**", "/user/signup", "/oauth2/**", "/login/oauth2/**", "/user/verify").permitAll()
 
                         // 프로젝트 검색과 상세조회는 허용
                         .requestMatchers("/project/read", "/project/search", "/file/read/**").permitAll()
+
+                        .requestMatchers("/test", "/health").permitAll()
 
                         // 테스트 API → USER 권한 필요
                         .requestMatchers("/test/*").hasRole("USER")
