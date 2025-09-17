@@ -80,9 +80,9 @@ jobs:
                       image: why48382/spring_basic-k8s:${{ github.run_number }}
                       ports:
                       - containerPort: 8080
-                        envFrom:
-                        - configMapRef:
-                            name: phanes-editor-back-env
+                      envFrom:
+                      - configMapRef:
+                          name: phanes-editor-back-env
                       livenessProbe:
                         httpGet:
                           path: /health
