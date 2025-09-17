@@ -1,7 +1,7 @@
 name: project deployment
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
 jobs:
   build:
     name: build
@@ -18,7 +18,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
       - name: Gradle build
         run: |
-          chmod +x ./gradlew
+          chmod +x ./gradlew  
           ./gradlew clean bootJar
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -32,18 +32,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/phanes-editor:latest
-          build-args: |
-            AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-            AWS_S3_BUCKET=${{ secrets.AWS_S3_BUCKET }}
-            AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            DB_URL=${{ secrets.DB_URL }}
-            DB_USERNAME=${{ secrets.DB_USERNAME }}
-            MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
-            MAIL_APP_PASSWORD=${{ secrets.MAIL_APP_PASSWORD }}
-            KAKAO_CLIENT_ID=${{ secrets.KAKAO_CLIENT_ID }}
-            KAKAO_CLIENT_SECRET=${{ secrets.KAKAO_CLIENT_SECRET }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/spring_basic-k8s:${{ github.run_number }}
 
   deploy:
     name: deploy
@@ -53,11 +42,74 @@ jobs:
       - name: run ssh
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          port: 22
+          host: 175.197.41.119
+          username: deploy
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 222
           script: |
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/phanes-editor:latest || true
-            docker rm -f phanes_server 2>/dev/null || true
-            docker run -d --name phanes_server -p 443:8080 --pull=always ${{ secrets.DOCKERHUB_USERNAME }}/phanes-editor:latest
+            if kubectl get svc phanes-back-svc -n lhs -o wide | grep -q "green"; then  
+              CURRENT_VER="green"  
+              NEXT_VER="blue"  
+            else  
+              CURRENT_VER="blue"  
+              NEXT_VER="green"  
+            fi  
+            
+            cat <<EOF | kubectl apply -f -  
+            apiVersion: apps/v1  
+            kind: Deployment  
+            metadata:  
+              name: phanes-deployment-${NEXT_VER}  
+              namespace: lhs  
+            spec:  
+              selector:  
+                matchLabels:  
+                  type: app  
+                  ver: ${NEXT_VER}  
+              replicas: 1  
+              strategy:  
+                type: RollingUpdate  
+              template:  
+                metadata:  
+                  labels:  
+                    type: app  
+                    ver: ${NEXT_VER}  
+                spec:  
+                  containers:  
+                    - name: container  
+                      image: why48382/spring_basic-k8s:${{ github.run_number }}  
+                      livenessProbe:  
+                        httpGet:  
+                          path: /health  
+                          port: 8080  
+                        initialDelaySeconds: 20  
+                        periodSeconds: 10  
+                      readinessProbe:  
+                        httpGet:  
+                          path: /test  
+                          port: 8080  
+                        initialDelaySeconds: 20  
+                        periodSeconds: 10  
+                        successThreshold: 3  
+                  terminationGracePeriodSeconds: 0  
+            EOF  
+            
+            kubectl rollout status deployment/phanes-deployment-${NEXT_VER} -lhs  
+            
+            cat <<EOF | kubectl apply -f -  
+            apiVersion: v1  
+            kind: Service  
+            metadata:  
+              name: phanes-back-svc
+              namespace: lhs  
+            spec:  
+              selector:  
+                type: app  
+                ver: ${NEXT_VER}  
+              ports:  
+                - port: 443  
+                  targetPort: 8080  
+              type: LoadBalancer  
+            EOF  
+            
+            kubectl scale deployment phanes-deployment-${CURRENT_VER} -n lhs --replicas=0
